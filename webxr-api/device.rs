@@ -17,7 +17,7 @@ use euclid::Size2D;
 use euclid::TypedRigidTransform3D;
 
 /// A trait for discovering XR devices
-pub trait Discovery: 'static {
+pub trait Discovery: 'static + Send {
     fn request_session(&mut self, mode: SessionMode, xr: SessionBuilder) -> Result<Session, Error>;
     fn supports_session(&self, mode: SessionMode) -> bool;
 }
