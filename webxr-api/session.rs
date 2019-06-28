@@ -3,14 +3,13 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use crate::webgl::GLFactory;
-use crate::webgl::WebGLExternalImages;
 use crate::Device;
 use crate::Error;
 use crate::Floor;
 use crate::Frame;
 use crate::Native;
 use crate::Views;
-use crate::WebGLContextId;
+use crate::WebGLExternalImageApi;
 
 use euclid::TypedRigidTransform3D;
 
@@ -20,6 +19,7 @@ use std::rc::Rc;
 use std::sync::mpsc;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
+use std::sync::Arc;
 use std::thread;
 
 /// https://www.w3.org/TR/webxr/#xrsessionmode-enum
@@ -34,12 +34,13 @@ pub enum SessionMode {
 pub type HighResTimeStamp = f64;
 
 /// https://www.w3.org/TR/webxr/#callbackdef-xrframerequestcallback
-pub type FrameRequestCallback = Box<'static + FnOnce(HighResTimeStamp, Frame) + Send>;
+pub type FrameRequestCallback = Box<dyn 'static + FnOnce(HighResTimeStamp, Frame) + Send>;
 
 // The messages that are sent from the content thread to the session thread.
 enum SessionMsg {
+    UpdateWebGLExternalImageApi(Box<dyn WebGLExternalImageApi>),
     RequestAnimationFrame(FrameRequestCallback),
-    RenderAnimationFrame(WebGLContextId),
+    RenderAnimationFrame,
 }
 
 /// An object that represents an XR session.
@@ -66,8 +67,8 @@ impl Session {
             .send(SessionMsg::RequestAnimationFrame(callback));
     }
 
-    pub fn render_animation_frame(&mut self, webgl: WebGLContextId) {
-        let _ = self.sender.send(SessionMsg::RenderAnimationFrame(webgl));
+    pub fn render_animation_frame(&mut self) {
+        let _ = self.sender.send(SessionMsg::RenderAnimationFrame);
     }
 }
 
@@ -75,7 +76,7 @@ impl Session {
 pub struct SessionThread<D> {
     receiver: Receiver<SessionMsg>,
     sender: Sender<SessionMsg>,
-    images: WebGLExternalImages,
+    images: Option<Box<dyn WebGLExternalImageApi>>,
     timestamp: HighResTimeStamp,
     device: D,
 }
@@ -95,16 +96,22 @@ impl<D: Device> SessionThread<D> {
     pub fn run(&mut self) {
         while let Ok(msg) = self.receiver.recv() {
             match msg {
+                SessionMsg::UpdateWebGLExternalImageApi(images) => {
+                    self.images = Some(images);
+                }
                 SessionMsg::RequestAnimationFrame(callback) => {
                     let timestamp = self.timestamp;
                     let frame = self.device.wait_for_animation_frame();
                     self.timestamp += 1.0;
                     callback(timestamp, frame);
                 }
-                SessionMsg::RenderAnimationFrame(ctx) => {
-                    let (texture_id, size) = self.images.lock(ctx);
-                    self.device.render_animation_frame(texture_id, size);
-                    self.images.unlock(ctx);
+                SessionMsg::RenderAnimationFrame => {
+                    if let Some(ref images) = self.images {
+                        if let Ok((texture_id, size, sync)) = images.lock() {
+                            self.device.render_animation_frame(texture_id, size, sync);
+                            images.unlock();
+                        }
+                    }
                 }
             }
         }
@@ -112,9 +119,7 @@ impl<D: Device> SessionThread<D> {
 }
 
 /// A type for building XR sessions
-#[derive(Clone)]
 pub struct SessionBuilder {
-    images: WebGLExternalImages,
     gl_factory: GLFactory,
 }
 
@@ -123,8 +128,8 @@ impl SessionBuilder {
     /// e.g. where the session thread has to be run on the main thread.
     pub fn new_thread<D: Device>(self, device: D) -> SessionThread<D> {
         let (sender, receiver) = mpsc::channel();
-        let images = self.images.clone();
         let timestamp = 0.0;
+        let images = None;
         SessionThread {
             sender,
             receiver,
@@ -155,7 +160,7 @@ impl SessionBuilder {
         ackr.recv().unwrap_or(Err(Error::CommunicationError))
     }
 
-    pub fn gl(&mut self) -> Rc<Gl> {
+    pub fn gl(&mut self) -> Rc<dyn Gl> {
         self.gl_factory.build()
     }
 }

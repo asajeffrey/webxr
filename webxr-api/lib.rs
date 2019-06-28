@@ -34,4 +34,4 @@ pub use view::View;
 pub use view::Viewer;
 pub use view::Views;
 
-pub use webgl::WebGLContextId;
+pub use webgl::WebGLExternalImageApi;

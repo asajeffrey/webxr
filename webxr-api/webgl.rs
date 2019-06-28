@@ -4,31 +4,22 @@
 
 //! The WebGL functionality needed by WebXR.
 
+use crate::Error;
 use euclid::Size2D;
+use gleam::gl::GLsync;
+use gleam::gl::GLuint;
 use gleam::gl::Gl;
 use std::rc::Rc;
 
-/// An identifier for a WebGL context.
-// TODO: refactor the Servo webgl_traits crate to support sharing this type.
-#[derive(Copy, Clone, Debug)]
-pub struct WebGLContextId(pub usize);
+/// A trait to get access a GL texture from a WebGL context.
+// TODO: refactor the Servo canvas crate to support sharing this trait.
+pub trait WebGLExternalImageApi: Send {
+    /// Lock the WebGL context, and get back a texture id, the size of the texture,
+    /// and a sync object for the texture.
+    fn lock(&self) -> Result<(GLuint, Size2D<i32>, GLsync), Error>;
 
-/// A type to get access to a GL texture from a WebGL context.
-// TODO: refactor the Servo canvas crate to support sharing this type.
-#[derive(Clone)]
-pub struct WebGLExternalImages(());
-
-/// https://github.com/servo/servo/blob/123f58592c9bedae735a84fe5c93b0a20292ea86/components/canvas/webgl_thread.rs#L733-L742
-impl WebGLExternalImages {
-    // TODO: implement this
-    pub fn lock(&mut self, _: WebGLContextId) -> (u32, Size2D<i32>) {
-        unimplemented!();
-    }
-
-    // TODO: implement this
-    pub fn unlock(&mut self, _: WebGLContextId) {
-        unimplemented!()
-    }
+    /// Unlock the WebGL context.
+    fn unlock(&self);
 }
 
 /// A factory for building GL objects.
@@ -37,7 +28,7 @@ impl WebGLExternalImages {
 pub struct GLFactory(());
 
 impl GLFactory {
-    pub fn build(&mut self) -> Rc<Gl> {
+    pub fn build(&mut self) -> Rc<dyn Gl> {
         unimplemented!()
     }
 }
