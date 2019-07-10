@@ -33,7 +33,7 @@ struct HeadlessDiscovery {
 
 struct HeadlessDevice {
     floor_transform: TypedRigidTransform3D<f32, Native, Floor>,
-    viewer_origin: TypedRigidTransform3D<f32, Native, Viewer>,
+    viewer_origin: TypedRigidTransform3D<f32, Viewer, Native>,
     views: Views,
     receiver: Receiver<MockDeviceMsg>,
 }
@@ -61,7 +61,7 @@ impl Discovery for HeadlessDiscovery {
         let floor_transform = self
             .init
             .local_to_floor_level_transform
-            .pre_mul(&viewer_origin);
+            .pre_mul(&viewer_origin.inverse());
         let views = self.init.views.clone();
         xr.spawn(move || {
             Ok(HeadlessDevice {
@@ -91,8 +91,9 @@ impl Device for HeadlessDevice {
         while let Ok(msg) = self.receiver.try_recv() {
             self.handle_msg(msg);
         }
-        let transform = self.viewer_origin.inverse();
-        Frame { transform }
+        Frame {
+	    transform: self.viewer_origin.clone(),
+	}
     }
 
     fn render_animation_frame(&mut self, _: GLuint, _: Size2D<i32>, _: GLsync) {}
