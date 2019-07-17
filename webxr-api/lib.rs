@@ -51,11 +51,14 @@ pub use view::Native;
 pub use view::RightEye;
 pub use view::View;
 pub use view::Viewer;
+pub use view::Viewport;
 pub use view::Views;
 
 pub use webgl::WebGLExternalImageApi;
 
+#[cfg(feature = "ipc")]
 use std::thread;
+
 use std::time::Duration;
 
 #[cfg(feature = "ipc")]
