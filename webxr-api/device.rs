@@ -58,3 +58,13 @@ pub trait Device: 'static {
     /// should be communicated through a yet-undecided event mechanism
     fn initial_inputs(&self) -> Vec<InputSource>;
 }
+
+impl Discovery for Box<dyn Discovery> {
+    fn request_session(&mut self, mode: SessionMode, xr: SessionBuilder) -> Result<Session, Error> {
+        (&mut **self).request_session(mode, xr)
+    }
+
+    fn supports_session(&self, mode: SessionMode) -> bool {
+        (&**self).supports_session(mode)
+    }
+}
