@@ -17,6 +17,9 @@ use crate::WebGLExternalImageApi;
 use euclid::TypedRigidTransform3D;
 use euclid::TypedSize2D;
 
+use gleam::gl::Gl;
+
+use std::rc::Rc;
 use std::thread;
 use std::time::Duration;
 
@@ -209,11 +212,15 @@ impl<D: Device> MainThreadSession for SessionThread<D> {
 /// A type for building XR sessions
 pub struct SessionBuilder<'a> {
     sessions: &'a mut Vec<Box<dyn MainThreadSession>>,
+    gl: &'a Rc<dyn Gl>,
 }
 
 impl<'a> SessionBuilder<'a> {
-    pub(crate) fn new(sessions: &'a mut Vec<Box<dyn MainThreadSession>>) -> SessionBuilder {
-        SessionBuilder { sessions }
+    pub(crate) fn new(
+        sessions: &'a mut Vec<Box<dyn MainThreadSession>>,
+        gl: &'a Rc<dyn Gl>,
+    ) -> SessionBuilder<'a> {
+        SessionBuilder { sessions, gl }
     }
 
     /// For devices which are happy to hand over thread management to webxr.
@@ -249,5 +256,10 @@ impl<'a> SessionBuilder<'a> {
         let session = session_thread.new_session();
         self.sessions.push(Box::new(session_thread));
         Ok(session)
+    }
+
+    /// For devices that need access to GL bindings
+    pub fn gl(&self) -> Rc<dyn Gl> {
+        self.gl.clone()
     }
 }

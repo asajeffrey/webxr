@@ -14,8 +14,12 @@ use crate::Session;
 use crate::SessionBuilder;
 use crate::SessionMode;
 
+use gleam::gl::Gl;
+
 #[cfg(feature = "ipc")]
 use serde::{Deserialize, Serialize};
+
+use std::rc::Rc;
 
 #[derive(Clone)]
 #[cfg_attr(feature = "ipc", derive(Serialize, Deserialize))]
@@ -27,6 +31,7 @@ pub struct MainThreadRegistry {
     discoveries: Vec<Box<dyn Discovery>>,
     sessions: Vec<Box<dyn MainThreadSession>>,
     mocks: Vec<Box<dyn MockDiscovery>>,
+    gl: Rc<dyn Gl>,
     sender: Sender<RegistryMsg>,
     receiver: Receiver<RegistryMsg>,
 }
@@ -77,7 +82,7 @@ impl Registry {
 }
 
 impl MainThreadRegistry {
-    pub fn new() -> Result<MainThreadRegistry, Error> {
+    pub fn new(gl: Rc<dyn Gl>) -> Result<MainThreadRegistry, Error> {
         let (sender, receiver) = crate::channel().or(Err(Error::CommunicationError))?;
         let discoveries = Vec::new();
         let sessions = Vec::new();
@@ -86,6 +91,7 @@ impl MainThreadRegistry {
             discoveries,
             sessions,
             mocks,
+            gl,
             sender,
             receiver,
         })
@@ -148,7 +154,7 @@ impl MainThreadRegistry {
 
     fn request_session(&mut self, mode: SessionMode) -> Result<Session, Error> {
         for discovery in &mut self.discoveries {
-            let xr = SessionBuilder::new(&mut self.sessions);
+            let xr = SessionBuilder::new(&mut self.sessions, &self.gl);
             if let Ok(session) = discovery.request_session(mode, xr) {
                 return Ok(session);
             }
