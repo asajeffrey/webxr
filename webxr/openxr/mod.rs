@@ -59,7 +59,7 @@ pub trait GlThread: Send {
 }
 
 pub trait SurfaceProviderRegistration: Send {
-    fn register(&self, id: SessionId, provider: Box<dyn SurfaceProvider + Send>);
+    fn register(&self, id: SessionId, provider: Box<dyn SurfaceProvider<SurfmanDevice> + Send>);
     fn clone(&self) -> Box<dyn SurfaceProviderRegistration>;
 }
 
@@ -193,7 +193,7 @@ struct OpenXrProvider {
 // safe to send between threads.
 unsafe impl Send for OpenXrProvider {}
 
-impl SurfaceProvider for OpenXrProvider {
+impl SurfaceProvider<SurfmanDevice> for OpenXrProvider {
     fn recycle_front_buffer(
         &mut self,
         _device: &mut surfman::Device,
