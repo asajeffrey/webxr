@@ -19,8 +19,8 @@ use openxr::{
     Vector3f, ViewConfigurationType,
 };
 use std::sync::{Arc, Mutex};
-use surfman::platform::generic::universal::device::Device as SurfmanDevice;
-use surfman::platform::generic::universal::surface::Surface;
+use surfman::Device as SurfmanDevice;
+use surfman::Surface;
 use surfman_chains::SurfaceProvider;
 use webxr_api;
 use webxr_api::util::{self, ClipPlanes};
