@@ -5,10 +5,10 @@ rust:
   - stable
 
 before_script:
-  - rustup component add rustfmt
+  - if [ $TRAVIS_RUST_VERSION =="stable" ]; then rustup component add rustfmt; fi
 
 script:
-  - cargo fmt --all -- --check
+  - if [ $TRAVIS_RUST_VERSION =="stable" ]; then cargo fmt --all -- --check; fi
   - cd webxr
   - cargo build --features=glwindow,headless,googlevr
   - cargo build --features=ipc,glwindow,headless,googlevr
