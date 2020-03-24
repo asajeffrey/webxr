@@ -370,7 +370,7 @@ impl OpenXrDevice {
             let d3d_device = native_device.d3d11_device;
             // Smuggle the pointer out as a usize value; D3D11 devices are threadsafe
             // so it's safe to use it from another thread.
-            let _ = device_tx.send(d3d_device.as_raw() as usize);
+            let _ = device_tx.send(d3d_device as usize);
             let _ = provider_rx.recv();
         }));
         // Get the D3D11 device pointer from the webgl thread.
