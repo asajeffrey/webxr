@@ -278,10 +278,10 @@ impl SurfaceProvider<SurfmanDevice> for OpenXrProvider {
             .take()
             .ok_or(surfman::Error::SurfaceDataInaccessible)
             .or_else(|_| unsafe {
-                device.create_surface_from_texture(
+                device.create_pbuffer_surface(
                     context,
                     &Size2D::new(size.width, size.height),
-                    self.images[image as usize],
+                    Some(self.images[image as usize]),
                 )
             });
         surface
@@ -295,7 +295,6 @@ impl SurfaceProvider<SurfmanDevice> for OpenXrProvider {
         &mut self,
         device: &mut surfman::Device,
         context: &mut surfman::Context,
-        _context_id: surfman::ContextID,
         new_front_buffer: Surface,
     ) -> Result<(), surfman::Error> {
         // At this point the front buffer's contents are already present in the underlying openxr texture.
