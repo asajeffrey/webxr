@@ -54,7 +54,7 @@ use input::OpenXRInput;
 const HEIGHT: f32 = 1.4;
 
 pub trait GlThread: Send {
-    fn execute(&self, runnable: Box<dyn FnOnce() + Send>);
+    fn execute(&self, runnable: Box<dyn FnOnce(&SurfmanDevice) + Send>);
     fn clone(&self) -> Box<dyn GlThread>;
 }
 
@@ -281,7 +281,7 @@ impl SurfaceProvider<SurfmanDevice> for OpenXrProvider {
                 device.create_pbuffer_surface(
                     context,
                     &Size2D::new(size.width, size.height),
-                    Some(self.images[image as usize]),
+                    Some(self.images[image as usize] as _),
                 )
             });
         surface
@@ -315,7 +315,7 @@ impl SurfaceProvider<SurfmanDevice> for OpenXrProvider {
             self.fake_surface = Some(device.create_surface(
                 context,
                 surfman::SurfaceAccess::GPUOnly,
-                &surfman::SurfaceType::Generic {
+                surfman::SurfaceType::Generic {
                     size: Size2D::new(1, 1),
                 },
             )?);
@@ -342,12 +342,12 @@ impl SurfaceProvider<SurfmanDevice> for OpenXrProvider {
     ) -> Result<(), surfman::Error> {
         // Destroy any cached surfaces that wrap OpenXR textures.
         for surface in self.surfaces.iter_mut().map(Option::take) {
-            if let Some(surface) = surface {
-                device.destroy_surface(context, surface)?;
+            if let Some(mut surface) = surface {
+                device.destroy_surface(context, &mut surface)?;
             }
         }
-        if let Some(fake) = self.fake_surface.take() {
-            device.destroy_surface(context, fake)?;
+        if let Some(mut fake) = self.fake_surface.take() {
+            device.destroy_surface(context, &mut fake)?;
         }
         Ok(())
     }
@@ -363,14 +363,11 @@ impl OpenXrDevice {
     ) -> Result<OpenXrDevice, Error> {
         let (device_tx, device_rx) = crossbeam_channel::unbounded();
         let (provider_tx, provider_rx) = crossbeam_channel::unbounded();
-        let _ = gl_thread.execute(Box::new(move || {
+        let _ = gl_thread.execute(Box::new(move |device| {
             // Get the current surfman device and extract it's D3D device. This will ensure
             // that the OpenXR runtime's texture will be shareable with surfman's surfaces.
-            let (device, mut context) = unsafe {
-                SurfmanDevice::from_current_context().expect("Failed to create graphics context!")
-            };
-            device.destroy_context(&mut context).unwrap();
-            let d3d_device = device.d3d11_device();
+	    let native_device = device.native_device();
+            let d3d_device = native_device.d3d11_device;
             // Smuggle the pointer out as a usize value; D3D11 devices are threadsafe
             // so it's safe to use it from another thread.
             let _ = device_tx.send(d3d_device.as_raw() as usize);

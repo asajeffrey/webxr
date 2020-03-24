@@ -250,8 +250,8 @@ impl GoogleVRDevice {
         };
         #[cfg(not(target_os = "linux"))]
         let native_context = {
-            use surfman::device::Device as DeviceAPI;
-            type NativeContext = <Device as DeviceAPI>::NativeContext;
+            use surfman::device::Device as SurfmanDeviceAPI;
+            type NativeContext = <SurfmanDevice as SurfmanDeviceAPI>::NativeContext;
             NativeContext::current().expect("Failed to bootstrap native context")
         };
         let context = device
