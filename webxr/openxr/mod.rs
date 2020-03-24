@@ -197,7 +197,6 @@ impl SurfaceProvider<SurfmanDevice> for OpenXrProvider {
     fn recycle_front_buffer(
         &mut self,
         _device: &mut surfman::Device,
-        _context_id: surfman::ContextID,
     ) {
         // At this point the frame contents have been rendered, so we can release access to the texture
         // in preparation for displaying it.
@@ -264,7 +263,6 @@ impl SurfaceProvider<SurfmanDevice> for OpenXrProvider {
         &mut self,
         device: &mut surfman::Device,
         context: &mut surfman::Context,
-        _context_id: surfman::ContextID,
         size: euclid::default::Size2D<i32>,
     ) -> Result<Surface, surfman::Error> {
         let image = self.swapchain.acquire_image().unwrap();
