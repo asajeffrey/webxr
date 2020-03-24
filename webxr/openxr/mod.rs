@@ -194,10 +194,7 @@ struct OpenXrProvider {
 unsafe impl Send for OpenXrProvider {}
 
 impl SurfaceProvider<SurfmanDevice> for OpenXrProvider {
-    fn recycle_front_buffer(
-        &mut self,
-        _device: &mut surfman::Device,
-    ) {
+    fn recycle_front_buffer(&mut self, _device: &mut surfman::Device) {
         // At this point the frame contents have been rendered, so we can release access to the texture
         // in preparation for displaying it.
         let mut data = self.shared_data.lock().unwrap();
