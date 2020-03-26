@@ -278,10 +278,10 @@ impl SurfaceProvider<SurfmanDevice> for OpenXrProvider {
             .take()
             .ok_or(surfman::Error::SurfaceDataInaccessible)
             .or_else(|_| unsafe {
-                device.create_pbuffer_surface(
+                device.create_surface_from_texture(
                     context,
                     &Size2D::new(size.width, size.height),
-                    Some(self.images[image as usize] as _),
+                    self.images[image as usize] as _,
                 )
             });
         surface
