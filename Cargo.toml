@@ -6,7 +6,7 @@ members = [
 
 [patch.crates-io]
 surfman-chains = { git = "https://github.com/asajeffrey/surfman-chains", branch = "multi" }
-surfman = { git = "https://github.com/asajeffrey/surfman", branch = "servo-surfmanup" }
+surfman = { git = "https://github.com/asajeffrey/surfman", branch = "surfmanup-prs" }
 
 [patch."https://github.com/pcwalton/surfman"]
-surfman = { git = "https://github.com/asajeffrey/surfman", branch = "servo-surfmanup" }
+surfman = { git = "https://github.com/asajeffrey/surfman", branch = "surfmanup-prs" }
