@@ -16,11 +16,8 @@ use crate::SessionBuilder;
 use crate::SessionId;
 use crate::SessionInit;
 use crate::SessionMode;
-use crate::SwapChainId;
 
 use log::warn;
-
-use surfman_chains_api::SwapChainsAPI;
 
 #[cfg(feature = "ipc")]
 use serde::{Deserialize, Serialize};
@@ -32,11 +29,10 @@ pub struct Registry {
     waker: MainThreadWakerImpl,
 }
 
-pub struct MainThreadRegistry<SwapChains> {
-    discoveries: Vec<Box<dyn DiscoveryAPI<SwapChains>>>,
+pub struct MainThreadRegistry {
+    discoveries: Vec<Box<dyn DiscoveryAPI>>,
     sessions: Vec<Box<dyn MainThreadSession>>,
-    mocks: Vec<Box<dyn MockDiscoveryAPI<SwapChains>>>,
-    swap_chains: Option<SwapChains>,
+    mocks: Vec<Box<dyn MockDiscoveryAPI>>,
     sender: Sender<RegistryMsg>,
     receiver: Receiver<RegistryMsg>,
     waker: MainThreadWakerImpl,
@@ -122,10 +118,7 @@ impl Registry {
     }
 }
 
-impl<SwapChains> MainThreadRegistry<SwapChains>
-where
-    SwapChains: SwapChainsAPI<SwapChainId>,
-{
+impl MainThreadRegistry {
     pub fn new(waker: Box<dyn MainThreadWaker>) -> Result<Self, Error> {
         let (sender, receiver) = crate::channel().or(Err(Error::CommunicationError))?;
         let discoveries = Vec::new();
@@ -152,11 +145,11 @@ where
         }
     }
 
-    pub fn register<D: DiscoveryAPI<SwapChains>>(&mut self, discovery: D) {
+    pub fn register<D: DiscoveryAPI>(&mut self, discovery: D) {
         self.discoveries.push(Box::new(discovery));
     }
 
-    pub fn register_mock<D: MockDiscoveryAPI<SwapChains>>(&mut self, discovery: D) {
+    pub fn register_mock<D: MockDiscoveryAPI>(&mut self, discovery: D) {
         self.mocks.push(Box::new(discovery));
     }
 

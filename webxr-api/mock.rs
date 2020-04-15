@@ -28,12 +28,12 @@ use euclid::{Rect, RigidTransform3D, Transform3D};
 use serde::{Deserialize, Serialize};
 
 /// A trait for discovering mock XR devices
-pub trait MockDiscoveryAPI<SwapChains>: 'static {
+pub trait MockDiscoveryAPI: 'static {
     fn simulate_device_connection(
         &mut self,
         init: MockDeviceInit,
         receiver: Receiver<MockDeviceMsg>,
-    ) -> Result<Box<dyn DiscoveryAPI<SwapChains>>, Error>;
+    ) -> Result<Box<dyn DiscoveryAPI>, Error>;
 }
 
 #[derive(Clone, Debug)]

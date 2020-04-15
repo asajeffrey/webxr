@@ -24,18 +24,18 @@ use euclid::RigidTransform3D;
 use euclid::Size2D;
 
 /// A trait for discovering XR devices
-pub trait DiscoveryAPI<SwapChains>: 'static {
+pub trait DiscoveryAPI: 'static {
     fn request_session(
         &mut self,
         mode: SessionMode,
         init: &SessionInit,
-        xr: SessionBuilder<SwapChains>,
+        xr: SessionBuilder,
     ) -> Result<Session, Error>;
     fn supports_session(&self, mode: SessionMode) -> bool;
 }
 
 /// A trait for using an XR device
-pub trait DeviceAPI<Surface>: 'static {
+pub trait DeviceAPI: 'static {
     /// The transform from native coordinates to the floor.
     fn floor_transform(&self) -> Option<RigidTransform3D<f32, Native, Floor>>;
 
@@ -60,7 +60,7 @@ pub trait DeviceAPI<Surface>: 'static {
     /// This method should render a surface to the device.
     /// While this method is being called, the device has ownership
     /// of the surface, and should return it afterwards.
-    fn render_animation_frame(&mut self, surface: Surface) -> Surface;
+    fn render_animation_frame(&mut self);
 
     /// Inputs registered with the device on initialization. More may be added, which
     /// should be communicated through a yet-undecided event mechanism
@@ -84,12 +84,12 @@ pub trait DeviceAPI<Surface>: 'static {
     fn granted_features(&self) -> &[String];
 }
 
-impl<SwapChains: 'static> DiscoveryAPI<SwapChains> for Box<dyn DiscoveryAPI<SwapChains>> {
+impl DiscoveryAPI for Box<dyn DiscoveryAPI> {
     fn request_session(
         &mut self,
         mode: SessionMode,
         init: &SessionInit,
-        xr: SessionBuilder<SwapChains>,
+        xr: SessionBuilder,
     ) -> Result<Session, Error> {
         (&mut **self).request_session(mode, init, xr)
     }

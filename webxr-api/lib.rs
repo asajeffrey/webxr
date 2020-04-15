@@ -15,6 +15,7 @@ mod error;
 mod events;
 mod frame;
 mod input;
+mod layer;
 mod mock;
 mod registry;
 mod session;
@@ -76,16 +77,16 @@ pub use view::Views;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[cfg_attr(feature = "ipc", derive(Serialize, Deserialize))]
-pub struct SwapChainId(usize);
+pub struct LayerId(usize);
 
-impl SwapChainId {
+impl LayerId {
     pub fn new() -> Self {
-        let id = NEXT_SWAP_CHAIN_ID.fetch_add(1, Ordering::SeqCst);
+        let id = NEXT_LAYER_ID.fetch_add(1, Ordering::SeqCst);
         Self(id)
     }
 }
 
-static NEXT_SWAP_CHAIN_ID: AtomicUsize = AtomicUsize::new(0);
+static NEXT_LAYER_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[cfg(feature = "ipc")]
 use std::thread;
