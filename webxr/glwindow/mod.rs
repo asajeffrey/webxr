@@ -296,7 +296,7 @@ impl GlWindowDevice {
             .unwrap()
             .unwrap()
             .size;
-        let viewport_size = Size2D::new(window_size.width / 2, window_size.height);
+        let viewport_size = Size2D::new(window_size.width, window_size.height);
         let viewport_x_origin = if is_right { viewport_size.width } else { 0 };
         let viewport_origin = Point2D::new(viewport_x_origin, 0);
         let viewport = Rect::new(viewport_origin, viewport_size);
@@ -330,7 +330,7 @@ impl GlWindowDevice {
         let fov_up = Angle::radians(f32::fast_atan2(2.0 * height, width));
         let f = 1.0 / fov_up.radians.tan();
         let nf = 1.0 / (near - far);
-        let aspect = (width / 2.0) / height;
+        let aspect = width / height;
 
         // Dear rustfmt, This is a 4x4 matrix, please leave it alone. Best, ajeffrey.
         {
@@ -365,6 +365,7 @@ const VERTEX_SHADER: &[u8] = b"
   }
 ";
 
+// A pass-through shader
 const FRAGMENT_SHADER: &[u8] = b"
   #version 330 core
   layout(location=0) out vec4 color;
@@ -372,6 +373,27 @@ const FRAGMENT_SHADER: &[u8] = b"
   in vec2 vTexCoord;
   void main() {
     color = texture(image, vTexCoord);
+  }
+";
+
+// A shader which renders the image as anaglyph stereo
+const ANAGLYPH_FRAGMENT_SHADER: &[u8] = b"
+  #version 330 core
+  layout(location=0) out vec4 color;
+  uniform sampler2D image;
+  void main() {
+    ivec2 size = textureSize(image, 0);
+    float left_x = gl_FragCoord.x / size.x;
+    float right_x = 0.5 + left_x;
+    float both_y = gl_FragCoord.y / size.y;
+    vec2 left_position = vec2(left_x, both_y);
+    vec2 right_position = vec2(right_x, both_y);
+    vec4 left_color = texture(image, left_position);
+    vec4 right_color = texture(image, right_position);
+    float red = left_color.x;
+    float green = (left_color.y + right_color.y) / 2;
+    float blue = right_color.z;
+    color = vec4(red, green, blue, 1.0);
   }
 ";
 
@@ -406,7 +428,7 @@ impl GlWindowShader {
         gl.shader_source(vertex_shader, &[VERTEX_SHADER]);
         gl.compile_shader(vertex_shader);
         gl.attach_shader(program, vertex_shader);
-        gl.shader_source(fragment_shader, &[FRAGMENT_SHADER]);
+        gl.shader_source(fragment_shader, &[ANAGLYPH_FRAGMENT_SHADER]);
         gl.compile_shader(fragment_shader);
         gl.attach_shader(program, fragment_shader);
         gl.link_program(program);
