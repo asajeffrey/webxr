@@ -5,14 +5,12 @@
 use crate::SessionBuilder;
 use crate::SwapChains;
 
-use euclid::Angle;
 use euclid::Point2D;
 use euclid::Rect;
 use euclid::RigidTransform3D;
 use euclid::Rotation3D;
 use euclid::Size2D;
 use euclid::Transform3D;
-use euclid::Trig;
 use euclid::UnknownUnit;
 use euclid::Vector3D;
 
@@ -54,8 +52,17 @@ use webxr_api::SessionMode;
 use webxr_api::View;
 use webxr_api::Views;
 
+// How far off the ground are the viewer's eyes?
 const HEIGHT: f32 = 1.0;
-const EYE_DISTANCE: f32 = 0.25;
+
+// What is half the distance between the viewer's eyes?
+const EYE_DISTANCE: f32 = 0.025;
+
+// How tall is a pixel in metres?
+const PIXEL_HEIGHT: f32 = 0.0001;
+
+// How far back is the viewer from the monitor?
+const MONITOR_DISTANCE: f32 = 1.0;
 
 pub trait GlWindow {
     fn get_native_widget(&self, device: &SurfmanDevice) -> NativeWidget;
@@ -131,7 +138,7 @@ pub struct GlWindowDevice {
 
 impl DeviceAPI<Surface> for GlWindowDevice {
     fn floor_transform(&self) -> Option<RigidTransform3D<f32, Native, Floor>> {
-        let translation = Vector3D::new(HEIGHT, 0.0, 0.0);
+        let translation = Vector3D::new(0.0, HEIGHT, 0.0);
         Some(RigidTransform3D::from_translation(translation))
     }
 
@@ -327,8 +334,9 @@ impl GlWindowDevice {
             .size;
         let width = size.width as f32;
         let height = size.height as f32;
-        let fov_up = Angle::radians(f32::fast_atan2(2.0 * height, width));
-        let f = 1.0 / fov_up.radians.tan();
+        // let fov_up = Angle::radians(f32::fast_atan2(height * PIXEL_HEIGHT / 2.0, MONITOR_DISTANCE));
+        // let f = 1.0 / fov_up.radians.tan();
+        let f = (2.0 * MONITOR_DISTANCE) / (height * PIXEL_HEIGHT);
         let nf = 1.0 / (near - far);
         let aspect = width / height;
 
@@ -381,17 +389,14 @@ const ANAGLYPH_FRAGMENT_SHADER: &[u8] = b"
   #version 330 core
   layout(location=0) out vec4 color;
   uniform sampler2D image;
+  in vec2 vTexCoord;
   void main() {
-    ivec2 size = textureSize(image, 0);
-    float left_x = gl_FragCoord.x / size.x;
-    float right_x = 0.5 + left_x;
-    float both_y = gl_FragCoord.y / size.y;
-    vec2 left_position = vec2(left_x, both_y);
-    vec2 right_position = vec2(right_x, both_y);
-    vec4 left_color = texture(image, left_position);
-    vec4 right_color = texture(image, right_position);
+    vec2 left_coord = vec2(vTexCoord.x/2, vTexCoord.y);
+    vec2 right_coord = vec2(0.5 + vTexCoord.x/2, vTexCoord.y);
+    vec4 left_color = texture(image, left_coord);
+    vec4 right_color = texture(image, right_coord);
     float red = left_color.x;
-    float green = (left_color.y + right_color.y) / 2;
+    float green = (left_color.y + right_color.y) / 2; // Blur green?
     float blue = right_color.z;
     color = vec4(red, green, blue, 1.0);
   }
