@@ -5,6 +5,7 @@
 use crate::SessionBuilder;
 use crate::SwapChains;
 
+use euclid::Angle;
 use euclid::Point2D;
 use euclid::Rect;
 use euclid::RigidTransform3D;
@@ -50,24 +51,46 @@ use webxr_api::Session;
 use webxr_api::SessionInit;
 use webxr_api::SessionMode;
 use webxr_api::View;
+use webxr_api::Viewport;
 use webxr_api::Views;
 
 // How far off the ground are the viewer's eyes?
 const HEIGHT: f32 = 1.0;
 
-// What is half the distance between the viewer's eyes?
-const EYE_DISTANCE: f32 = 0.025;
+// What is half the vertical field of view?
+const FOV_UP: f32 = 45.0;
 
-// How tall is a pixel in metres?
-const PIXEL_HEIGHT: f32 = 0.0001;
+// Some guesstimated numbers, hopefully it doesn't matter if these are off by a bit.
 
-// How far back is the viewer from the monitor?
-const MONITOR_DISTANCE: f32 = 1.0;
+// What the distance between the viewer's eyes?
+const INTER_PUPILLARY_DISTANCE: f32 = 0.06;
+
+// What is the size of a pixel?
+const PIXELS_PER_METRE: f32 = 6000.0;
 
 pub trait GlWindow {
     fn get_native_widget(&self, device: &SurfmanDevice) -> NativeWidget;
     fn get_rotation(&self) -> Rotation3D<f32, UnknownUnit, UnknownUnit>;
     fn get_translation(&self) -> Vector3D<f32, UnknownUnit>;
+
+    fn get_mode(&self) -> GlWindowMode {
+        GlWindowMode::StereoLeftRight
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum GlWindowMode {
+    StereoLeftRight,
+    StereoRedCyan,
+}
+
+impl GlWindowMode {
+    fn is_anaglyph(&self) -> bool {
+        match self {
+            GlWindowMode::StereoLeftRight => false,
+            GlWindowMode::StereoRedCyan => true,
+        }
+    }
 }
 
 pub struct GlWindowDiscovery {
@@ -186,6 +209,8 @@ impl DeviceAPI<Surface> for GlWindowDevice {
         self.device.make_context_current(&self.context).unwrap();
         debug_assert_eq!(self.gl.get_error(), gl::NO_ERROR);
 
+        let viewport_size = self.viewport_size();
+        let texture_size = self.device.surface_info(&surface).size;
         let surface_texture = self
             .device
             .create_surface_texture(&mut self.context, surface)
@@ -197,7 +222,8 @@ impl DeviceAPI<Surface> for GlWindowDevice {
         self.gl.clear(gl::COLOR_BUFFER_BIT);
         debug_assert_eq!(self.gl.get_error(), gl::NO_ERROR);
 
-        self.shader.draw_texture(texture_id, texture_target);
+        self.shader
+            .draw_texture(texture_id, texture_target, texture_size, viewport_size);
         debug_assert_eq!(self.gl.get_error(), gl::NO_ERROR);
 
         self.device
@@ -281,7 +307,7 @@ impl GlWindowDevice {
             (gl::NO_ERROR, gl::FRAMEBUFFER_COMPLETE)
         );
 
-        let shader = GlWindowShader::new(gl.clone());
+        let shader = GlWindowShader::new(gl.clone(), window.get_mode());
         debug_assert_eq!(gl.get_error(), gl::NO_ERROR);
 
         Ok(GlWindowDevice {
@@ -296,24 +322,38 @@ impl GlWindowDevice {
         })
     }
 
-    fn view<Eye>(&self, is_right: bool) -> View<Eye> {
+    fn viewport_size(&self) -> Size2D<i32, Viewport> {
         let window_size = self
             .device
             .context_surface_info(&self.context)
             .unwrap()
             .unwrap()
-            .size;
-        let viewport_size = Size2D::new(window_size.width, window_size.height);
+            .size
+            .to_i32();
+        if self.window.get_mode().is_anaglyph() {
+            // This device has a slightly odd characteristic, which is that anaglyphic stereo
+            // renders both eyes to the same surface. If we want the two eyes to be parallel,
+            // and to agree at distance infinity, this means gettng the XR content to render some
+            // wasted pixels, which are stripped off when we render to the target surface.
+            // (The wasted pixels are on the right of the left eye and vice versa.)
+            let wasted_pixels = (INTER_PUPILLARY_DISTANCE / PIXELS_PER_METRE) as i32;
+            Size2D::new(window_size.width + wasted_pixels, window_size.height)
+        } else {
+            Size2D::new(window_size.width / 2, window_size.height)
+        }
+    }
+
+    fn view<Eye>(&self, is_right: bool) -> View<Eye> {
+        let viewport_size = self.viewport_size();
         let viewport_x_origin = if is_right { viewport_size.width } else { 0 };
         let viewport_origin = Point2D::new(viewport_x_origin, 0);
         let viewport = Rect::new(viewport_origin, viewport_size);
         let projection = self.perspective();
-        let eye_distance = if is_right {
-            EYE_DISTANCE
+        let translation = if is_right {
+            Vector3D::new(-INTER_PUPILLARY_DISTANCE / 2.0, 0.0, 0.0)
         } else {
-            -EYE_DISTANCE
+            Vector3D::new(INTER_PUPILLARY_DISTANCE / 2.0, 0.0, 0.0)
         };
-        let translation = Vector3D::new(eye_distance, 0.0, 0.0);
         let transform = RigidTransform3D::from_translation(translation);
         View {
             transform,
@@ -326,19 +366,11 @@ impl GlWindowDevice {
         let near = self.clip_planes.near;
         let far = self.clip_planes.far;
         // https://gith<ub.com/toji/gl-matrix/blob/bd3307196563fbb331b40fc6ebecbbfcc2a4722c/src/mat4.js#L1271
-        let size = self
-            .device
-            .context_surface_info(&self.context)
-            .unwrap()
-            .unwrap()
-            .size;
-        let width = size.width as f32;
-        let height = size.height as f32;
-        // let fov_up = Angle::radians(f32::fast_atan2(height * PIXEL_HEIGHT / 2.0, MONITOR_DISTANCE));
-        // let f = 1.0 / fov_up.radians.tan();
-        let f = (2.0 * MONITOR_DISTANCE) / (height * PIXEL_HEIGHT);
+        let size = self.viewport_size();
+        let fov_up = Angle::degrees(FOV_UP);
+        let f = 1.0 / fov_up.radians.tan();
         let nf = 1.0 / (near - far);
-        let aspect = width / height;
+        let aspect = size.width as f32 / size.height as f32;
 
         // Dear rustfmt, This is a 4x4 matrix, please leave it alone. Best, ajeffrey.
         {
@@ -359,11 +391,13 @@ struct GlWindowShader {
     buffer: GLuint,
     vao: GLuint,
     program: GLuint,
+    mode: GlWindowMode,
 }
 
 const VERTEX_ATTRIBUTE: GLuint = 0;
 const VERTICES: &[[f32; 2]; 4] = &[[-1.0, -1.0], [-1.0, 1.0], [1.0, -1.0], [1.0, 1.0]];
-const VERTEX_SHADER: &[u8] = b"
+
+const PASSTHROUGH_VERTEX_SHADER: &[u8] = b"
   #version 330 core
   layout(location=0) in vec2 coord;
   out vec2 vTexCoord;
@@ -373,8 +407,7 @@ const VERTEX_SHADER: &[u8] = b"
   }
 ";
 
-// A pass-through shader
-const FRAGMENT_SHADER: &[u8] = b"
+const PASSTHROUGH_FRAGMENT_SHADER: &[u8] = b"
   #version 330 core
   layout(location=0) out vec4 color;
   uniform sampler2D image;
@@ -384,26 +417,38 @@ const FRAGMENT_SHADER: &[u8] = b"
   }
 ";
 
-// A shader which renders the image as anaglyph stereo
-const ANAGLYPH_FRAGMENT_SHADER: &[u8] = b"
+const ANAGLYPH_VERTEX_SHADER: &[u8] = b"
+  #version 330 core
+  layout(location=0) in vec2 coord;
+  uniform float wasted; // What fraction of the image is wasted?
+  out vec2 left_coord;
+  out vec2 right_coord;
+  void main(void) {
+    gl_Position = vec4(coord, 0.0, 1.0);
+    vec2 coordn = coord * 0.5 + 0.5;
+    left_coord = vec2(mix(wasted/2, 0.5, coordn.x), coordn.y);
+    right_coord = vec2(mix(0.5, 1-wasted/2, coordn.x), coordn.y);
+  }
+";
+
+const ANAGLYPH_RED_CYAN_FRAGMENT_SHADER: &[u8] = b"
   #version 330 core
   layout(location=0) out vec4 color;
   uniform sampler2D image;
-  in vec2 vTexCoord;
+  in vec2 left_coord;
+  in vec2 right_coord;
   void main() {
-    vec2 left_coord = vec2(vTexCoord.x/2, vTexCoord.y);
-    vec2 right_coord = vec2(0.5 + vTexCoord.x/2, vTexCoord.y);
     vec4 left_color = texture(image, left_coord);
     vec4 right_color = texture(image, right_coord);
     float red = left_color.x;
-    float green = (left_color.y + right_color.y) / 2; // Blur green?
+    float green = right_color.y;
     float blue = right_color.z;
     color = vec4(red, green, blue, 1.0);
   }
 ";
 
 impl GlWindowShader {
-    fn new(gl: Rc<dyn Gl>) -> GlWindowShader {
+    fn new(gl: Rc<dyn Gl>, mode: GlWindowMode) -> GlWindowShader {
         // The four corners of the window in a VAO, set to attribute 0
         let buffer = gl.gen_buffers(1)[0];
         let vao = gl.gen_vertex_arrays(1)[0];
@@ -426,14 +471,24 @@ impl GlWindowShader {
         gl.enable_vertex_attrib_array(VERTEX_ATTRIBUTE);
         debug_assert_eq!(gl.get_error(), gl::NO_ERROR);
 
+        // The shader source
+        let (vertex_source, fragment_source) = match mode {
+            GlWindowMode::StereoLeftRight => {
+                (PASSTHROUGH_VERTEX_SHADER, PASSTHROUGH_FRAGMENT_SHADER)
+            }
+            GlWindowMode::StereoRedCyan => {
+                (ANAGLYPH_VERTEX_SHADER, ANAGLYPH_RED_CYAN_FRAGMENT_SHADER)
+            }
+        };
+
         // The shader program
         let program = gl.create_program();
         let vertex_shader = gl.create_shader(gl::VERTEX_SHADER);
         let fragment_shader = gl.create_shader(gl::FRAGMENT_SHADER);
-        gl.shader_source(vertex_shader, &[VERTEX_SHADER]);
+        gl.shader_source(vertex_shader, &[vertex_source]);
         gl.compile_shader(vertex_shader);
         gl.attach_shader(program, vertex_shader);
-        gl.shader_source(fragment_shader, &[ANAGLYPH_FRAGMENT_SHADER]);
+        gl.shader_source(fragment_shader, &[fragment_source]);
         gl.compile_shader(fragment_shader);
         gl.attach_shader(program, fragment_shader);
         gl.link_program(program);
@@ -476,14 +531,31 @@ impl GlWindowShader {
             buffer,
             vao,
             program,
+            mode,
         }
     }
 
-    fn draw_texture(&self, texture_id: GLuint, texture_target: GLuint) {
+    fn draw_texture(
+        &self,
+        texture_id: GLuint,
+        texture_target: GLuint,
+        texture_size: Size2D<i32, UnknownUnit>,
+        viewport_size: Size2D<i32, Viewport>,
+    ) {
         self.gl.use_program(self.program);
         self.gl.bind_vertex_array(self.vao);
         self.gl.active_texture(gl::TEXTURE0);
         self.gl.bind_texture(texture_target, texture_id);
+
+        if self.mode.is_anaglyph() {
+            let wasted = 1.0
+                - (texture_size.width as f32 / viewport_size.width as f32)
+                    .max(0.0)
+                    .min(1.0);
+            let wasted_location = self.gl.get_uniform_location(self.program, "wasted");
+            self.gl.uniform_1f(wasted_location, wasted);
+        }
+
         self.gl
             .draw_arrays(gl::TRIANGLE_STRIP, 0, VERTICES.len() as i32);
         debug_assert_eq!(self.gl.get_error(), gl::NO_ERROR);
