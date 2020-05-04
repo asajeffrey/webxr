@@ -74,7 +74,7 @@ pub trait GlWindow {
     fn get_translation(&self) -> Vector3D<f32, UnknownUnit>;
 
     fn get_mode(&self) -> GlWindowMode {
-        GlWindowMode::StereoLeftRight
+        GlWindowMode::Blit
     }
 }
 
@@ -375,7 +375,7 @@ impl GlWindowDevice {
             texture_size.height,
             0,
             0,
-            viewport_size.width,
+            viewport_size.width * 2,
             viewport_size.height,
             gl::COLOR_BUFFER_BIT,
             gl::NEAREST,
@@ -521,6 +521,11 @@ impl GlWindowShader {
                 (ANAGLYPH_VERTEX_SHADER, ANAGLYPH_RED_CYAN_FRAGMENT_SHADER)
             }
         };
+
+        // TODO: work out why shaders don't work on macos
+        if cfg!(target_os = "macos") {
+            log::warn!("XR shaders may not render on MacOS.");
+        }
 
         // The four corners of the window in a VAO, set to attribute 0
         let buffer = gl.gen_buffers(1)[0];
