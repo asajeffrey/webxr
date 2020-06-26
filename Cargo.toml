@@ -3,3 +3,8 @@ members = [
     "webxr",
     "webxr-api"
 ]
+
+[patch.crates-io]
+surfman = { git = "https://github.com/asajeffrey/surfman", rev = "2283acaa3a856c2f76028cb23b5dde7dc0030cdf" }
+surfman-chains-api = { git = "https://github.com/asajeffrey/surfman-chains", branch = "v0.3" }
+surfman-chains = { git = "https://github.com/asajeffrey/surfman-chains", branch = "v0.3" }
