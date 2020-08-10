@@ -23,12 +23,11 @@ impl GlClearer {
         GlClearer { fbos }
     }
 
-    fn fbo(
+    pub(crate) fn fbo(
         &mut self,
         gl: &Gl,
         layer_id: LayerId,
         color: GLuint,
-        color_target: GLuint,
         depth_stencil: Option<GLuint>,
     ) -> GLuint {
         *self
@@ -49,7 +48,7 @@ impl GlClearer {
                 gl.framebuffer_texture_2d(
                     gl::FRAMEBUFFER,
                     gl::COLOR_ATTACHMENT0,
-                    color_target,
+                    gl::TEXTURE_2D,
                     color,
                     0,
                 );
@@ -66,6 +65,13 @@ impl GlClearer {
                 gl.bind_framebuffer(gl::READ_FRAMEBUFFER, bound_fbos[1] as GLuint);
                 debug_assert_eq!(gl.get_error(), gl::NO_ERROR);
 
+                log::debug!(
+                    "Created FBO {} for layer/color/depth {:?}/{:?}/{:?}",
+                    fbo,
+                    layer_id,
+                    color,
+                    depth_stencil
+                );
                 fbo
             })
     }
@@ -77,14 +83,13 @@ impl GlClearer {
         context_id: ContextId,
         layer_id: LayerId,
         color: GLuint,
-        color_target: GLuint,
         depth_stencil: Option<GLuint>,
     ) {
         let gl = match contexts.bindings(device, context_id) {
             None => return,
             Some(gl) => gl,
         };
-        let fbo = self.fbo(gl, layer_id, color, color_target, depth_stencil);
+        let fbo = self.fbo(gl, layer_id, color, depth_stencil);
 
         // Save the current GL state
         let mut bound_fbos = [0, 0];
@@ -109,6 +114,10 @@ impl GlClearer {
 
         // Clear it
         gl.bind_framebuffer(gl::FRAMEBUFFER, fbo);
+        debug_assert_eq!(
+            (gl.get_error(), gl.check_framebuffer_status(gl::FRAMEBUFFER),),
+            (gl::NO_ERROR, gl::FRAMEBUFFER_COMPLETE)
+        );
         gl.clear_color(0., 0., 0., 1.);
         gl.clear_depth(1.);
         gl.clear_stencil(0);
@@ -118,10 +127,23 @@ impl GlClearer {
         gl.stencil_mask(0xFFFFFFFF);
         gl.color_mask(true, true, true, true);
         gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT | gl::STENCIL_BUFFER_BIT);
+        debug_assert_eq!(gl.get_error(), gl::NO_ERROR);
 
         // Restore the GL state
         gl.bind_framebuffer(gl::DRAW_FRAMEBUFFER, bound_fbos[0] as GLuint);
         gl.bind_framebuffer(gl::READ_FRAMEBUFFER, bound_fbos[1] as GLuint);
+        debug_assert_eq!(
+            (
+                gl.get_error(),
+                gl.check_framebuffer_status(gl::DRAW_FRAMEBUFFER),
+                gl.check_framebuffer_status(gl::READ_FRAMEBUFFER),
+            ),
+            (
+                gl::NO_ERROR,
+                gl::FRAMEBUFFER_COMPLETE,
+                gl::FRAMEBUFFER_COMPLETE
+            )
+        );
         gl.clear_color(
             clear_color[0],
             clear_color[1],
